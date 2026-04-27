@@ -1,0 +1,77 @@
+# =============================================================================
+# Lab 2: Docker Swarm Stack – Load Balancing Demo
+# =============================================================================
+# Mục đích:
+#   Chứng minh Ingress Routing Mesh phân phối 10 requests qua 5 containers
+#   khác nhau bằng cách trả về hostname của từng container.
+#
+# Cách dùng:
+#   # Bước 1: Build image
+#   docker build -t swarm-lb-demo:1.0 ./app
+#
+#   # Bước 2: Triển khai stack
+#   docker stack deploy -c docker-compose.yml lbstack
+#
+#   # Bước 3: Gửi 10 requests và quan sát
+#   for i in $(seq 1 10); do curl -s http://localhost:3000 | grep hostname; done
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ── API Service – Load Balancing Demo ──────────────────────────────────────
+  api:
+    # Image đã được build từ ./app/Dockerfile
+    image: swarm-lb-demo:1.0
+    
+    # Build image (chỉ dùng khi chạy docker-compose up, bị bỏ qua với docker stack deploy)
+    # build: ./app
+    
+    # Publish port 3000: bất kỳ node nào trong cluster đều nhận được request
+    ports:
+      - "3000:3000"
+    
+    networks:
+      - lb-network
+    
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    
+    # ── Cấu hình Deploy ──────────────────────────────────────────────────────
+    deploy:
+      # 5 bản sao để chứng minh load balancing rõ ràng
+      replicas: 5
+      mode: replicated
+      
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+        reservations:
+          cpus: "0.10"
+          memory: 32M
+      
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 60s
+      
+      update_config:
+        parallelism: 2         # Cập nhật 2 tasks cùng lúc
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        order: start-first     # Khởi động bản mới trước khi dừng bản cũ
+      
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        failure_action: pause
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  lb-network:
+    driver: overlay
+    attachable: true

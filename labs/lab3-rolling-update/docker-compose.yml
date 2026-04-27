@@ -1,0 +1,110 @@
+# =============================================================================
+# Lab 3: Docker Swarm Stack – Rolling Update Demo
+# =============================================================================
+# Mục đích:
+#   Demo quy trình Rolling Update:
+#   nginx:1.23 → nginx:1.24 → quan sát Swarm cập nhật từng task
+#
+# Các bước thực hiện:
+#   1. Deploy với nginx:1.23
+#      docker stack deploy -c docker-compose.yml rollstack
+#
+#   2. Quan sát tasks đang chạy (version cũ)
+#      docker service ps rollstack_web
+#
+#   3. Cập nhật image lên nginx:1.24
+#      docker service update --image nginx:1.24-alpine rollstack_web
+#
+#   4. Theo dõi rolling update
+#      watch docker service ps rollstack_web
+#
+#   5. Kiểm tra service không bị gián đoạn (terminal khác)
+#      while true; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:80; sleep 1; done
+#
+#   6. (Tùy chọn) Rollback về nginx:1.23
+#      docker service rollback rollstack_web
+# =============================================================================
+
+version: "3.8"
+
+services:
+  web:
+    # ─────────────────────────────────────────────────────────────────────────
+    # BƯỚC 1: Bắt đầu với nginx:1.23
+    # BƯỚC 3: Đổi thành nginx:1.24-alpine để trigger Rolling Update
+    # ─────────────────────────────────────────────────────────────────────────
+    image: nginx:1.23
+    
+    ports:
+      - "80:80"
+    
+    networks:
+      - rollnet
+    
+    # ── Cấu hình Deploy với Rolling Update ───────────────────────────────────
+    deploy:
+      replicas: 3
+      mode: replicated
+      
+      resources:
+        limits:
+          cpus: "0.30"
+          memory: 64M
+        reservations:
+          cpus: "0.10"
+          memory: 32M
+      
+      # ── Rolling Update Configuration ─────────────────────────────────────
+      update_config:
+        # Cập nhật 1 task mỗi lần → dễ quan sát từng bước
+        parallelism: 1
+        
+        # Chờ 15 giây giữa các bước cập nhật
+        # → Đủ thời gian để curl thấy service vẫn đang trả về 200
+        delay: 15s
+        
+        # Nếu task mới bị lỗi → tự động rollback về image cũ
+        failure_action: rollback
+        
+        # Theo dõi task trong 30 giây để đảm bảo stable
+        monitor: 30s
+        
+        # Không chấp nhận bất kỳ tỉ lệ lỗi nào
+        max_failure_ratio: 0
+        
+        # Dừng task cũ trước, mới khởi động task mới
+        # (stop-first: an toàn về resource, nhưng giảm capacity tạm thời)
+        order: stop-first
+      
+      # ── Rollback Configuration ────────────────────────────────────────────
+      rollback_config:
+        # Rollback từng task một
+        parallelism: 1
+        
+        # Chờ 10 giây giữa mỗi bước rollback
+        delay: 10s
+        
+        # Nếu rollback cũng thất bại → tạm dừng để admin xem xét
+        failure_action: pause
+        
+        # Theo dõi 20 giây sau mỗi task được rollback
+        monitor: 20s
+        
+        # Không chấp nhận lỗi trong rollback
+        max_failure_ratio: 0
+        
+        # Dừng task rollback mới trước khi start task cũ
+        order: stop-first
+      
+      # ── Restart Policy ────────────────────────────────────────────────────
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  rollnet:
+    driver: overlay
+    attachable: true

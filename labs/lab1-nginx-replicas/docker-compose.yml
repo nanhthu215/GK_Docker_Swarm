@@ -1,0 +1,94 @@
+# =============================================================================
+# Lab 1: Docker Swarm Stack – Nginx với 3 Replicas
+# =============================================================================
+# Mục đích:
+#   Triển khai web server Nginx lên Docker Swarm với 3 bản sao (replicas),
+#   cấu hình giới hạn tài nguyên, chính sách restart, và rolling update.
+#
+# Cách dùng:
+#   docker swarm init
+#   docker stack deploy -c docker-compose.yml webstack
+#   docker service ps webstack_nginx
+# =============================================================================
+
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:1.24-alpine
+    
+    # Publish port 80 của host → port 80 của container
+    # Ingress mode (mặc định): bất kỳ node nào trong cluster đều có thể nhận request
+    ports:
+      - "80:80"
+    
+    networks:
+      - webnet
+    
+    # ── Cấu hình Swarm Deploy ─────────────────────────────────────────────────
+    deploy:
+      # Chạy 3 bản sao (replicas) của container nginx
+      replicas: 3
+      
+      # Chế độ replicated: phân phối N bản sao lên các nodes
+      mode: replicated
+      
+      # ── Giới hạn và đặt trước tài nguyên ─────────────────────────────────
+      resources:
+        limits:
+          # Mỗi replica tối đa dùng 50% 1 CPU core và 64MB RAM
+          cpus: "0.50"
+          memory: 64M
+        reservations:
+          # Mỗi replica được đảm bảo ít nhất 25% CPU và 32MB RAM
+          cpus: "0.25"
+          memory: 32M
+      
+      # ── Chính sách Restart ───────────────────────────────────────────────
+      restart_policy:
+        # Chỉ restart khi container thoát với lỗi (exit code != 0)
+        condition: on-failure
+        # Chờ 5 giây trước khi thử restart
+        delay: 5s
+        # Thử tối đa 3 lần trong cửa sổ 120 giây
+        max_attempts: 3
+        window: 120s
+      
+      # ── Cấu hình Rolling Update ──────────────────────────────────────────
+      update_config:
+        # Cập nhật 1 task mỗi lần (từng cái một)
+        parallelism: 1
+        # Chờ 10 giây giữa mỗi lần cập nhật để đảm bảo ổn định
+        delay: 10s
+        # Nếu update thất bại → tự động rollback về phiên bản cũ
+        failure_action: rollback
+        # Theo dõi task trong 30 giây sau khi update
+        monitor: 30s
+        # Không chấp nhận bất kỳ tỉ lệ lỗi nào
+        max_failure_ratio: 0
+        # Dừng task cũ trước, rồi mới khởi động task mới
+        order: stop-first
+      
+      # ── Cấu hình Rollback ────────────────────────────────────────────────
+      rollback_config:
+        # Rollback 1 task mỗi lần
+        parallelism: 1
+        # Chờ 5 giây giữa mỗi bước rollback
+        delay: 5s
+        # Nếu rollback cũng lỗi → tạm dừng (để admin xem xét)
+        failure_action: pause
+        monitor: 20s
+      
+      # ── Ràng buộc vị trí ─────────────────────────────────────────────────
+      # (Bỏ comment nếu muốn chỉ chạy trên worker nodes)
+      # placement:
+      #   constraints:
+      #     - node.role == worker
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  webnet:
+    # Overlay network: cho phép containers giao tiếp qua nhiều nodes
+    driver: overlay
+    # attachable: true → cho phép standalone containers kết nối vào network này
+    attachable: true

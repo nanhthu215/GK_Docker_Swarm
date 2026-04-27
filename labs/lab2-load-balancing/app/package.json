@@ -1,0 +1,12 @@
+{
+  "name": "swarm-lb-demo",
+  "version": "1.0.0",
+  "description": "Load Balancing Demo for Docker Swarm",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
