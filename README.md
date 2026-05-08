@@ -1,35 +1,31 @@
-# 🐳 Docker Swarm & Advanced Deployment
+# Docker Swarm & Advanced Deployment
 
-> **Môn học:** Triển khai ứng dụng  
-> **Đề tài:** Tìm hiểu về Docker Swarm và Triển khai nâng cao
+> Môn học: Triển khai ứng dụng  
+> Đề tài: Tìm hiểu về Docker Swarm và Triển khai nâng cao
 
----
+## Nội dung
 
-## 📚 Nội dung
+| # | Chủ đề |
+|---|--------|
+| 1 | [Giới thiệu Docker Swarm & Container Orchestration](docs/01-introduction.md) |
+| 2 | [Kiến trúc Swarm (Swarm Architecture)](docs/02-architecture.md) |
+| 3 | [Services và Tasks](docs/03-services-tasks.md) |
+| 4 | [Scaling & Load Balancing](docs/04-scaling-load-balancing.md) |
+| 5 | [Deploying a Stack](docs/05-deploy-stack.md) |
+| 6 | [Rolling Updates & Rollbacks](docs/06-rolling-updates.md) |
+| 7 | [High Availability & Fault Tolerance](docs/07-ha-fault-tolerance.md) |
 
-| #  | Chủ đề |
-|----|--------|
-| 1  | [Giới thiệu Docker Swarm & Container Orchestration](docs/01-introduction.md) |
-| 2  | [Kiến trúc Swarm (Swarm Architecture)](docs/02-architecture.md) |
-| 3  | [Services và Tasks](docs/03-services-tasks.md) |
-| 4  | [Scaling & Load Balancing](docs/04-scaling-load-balancing.md) |
-| 5  | [Deploying a Stack](docs/05-deploy-stack.md) |
-| 6  | [Rolling Updates & Rollbacks](docs/06-rolling-updates.md) |
-| 7  | [High Availability & Fault Tolerance](docs/07-ha-fault-tolerance.md) |
 
----
+## Bài tập thực hành
 
-## 🛠 Bài tập thực hành
+| # | Bài tập | Thư mục |
+|---|---------|---------|
+| 1 | Web service 3 replicas (Nginx) | [`labs/lab1-nginx-replicas/`](labs/lab1-nginx-replicas/) |
+| 2 | Load Balancing demo (Node.js API) | [`labs/lab2-load-balancing/`](labs/lab2-load-balancing/) |
+| 3 | Rolling Update demo | [`labs/lab3-rolling-update/`](labs/lab3-rolling-update/) |
+| 4 | Self-healing & Fault Tolerance demo | [`labs/lab4-self-healing/`](labs/lab4-self-healing/) |
 
-| #  | Bài tập | Thư mục |
-|----|---------|---------|
-| 1  | Web service 3 replicas (Nginx) | [`labs/lab1-nginx-replicas/`](labs/lab1-nginx-replicas/) |
-| 2  | Load Balancing demo (Node.js API) | [`labs/lab2-load-balancing/`](labs/lab2-load-balancing/) |
-| 3  | Rolling Update demo | [`labs/lab3-rolling-update/`](labs/lab3-rolling-update/) |
-
----
-
-## ⚡ Quick Start
+## Quick Start
 
 ```bash
 # 1. Khởi tạo Swarm (single-node, chạy local)
@@ -43,30 +39,36 @@ docker stack ps webstack
 docker service ls
 ```
 
----
+## Lưu ý quan trọng
 
-## 📂 Cấu trúc dự án
+- Các lab trong repo được tối ưu để chạy trên Swarm single-node ở máy local.
+- Với Swarm multi-node thực tế, image tùy biến như `swarm-lb-demo:1.0` phải được push lên registry mà mọi node đều truy cập được, hoặc được nạp sẵn trên từng node.
+- Routing Mesh giúp cân bằng tải giữa các replicas, nhưng nó sẽ phân phối tương đối đều qua nhiều hostname chứ không hẳn lúc nào số n request sẽ luôn chia đều số request/container.
+
+## Cấu trúc dự án
 
 ```
-GK/
+Mid_Term/
 ├── README.md
-├── docs/                        # Tài liệu lý thuyết từng chủ đề
+├── HUONG-DAN-CHAY.md
+├── docs/
 │   ├── 01-introduction.md
 │   ├── 02-architecture.md
 │   ├── 03-services-tasks.md
 │   ├── 04-scaling-load-balancing.md
 │   ├── 05-deploy-stack.md
 │   ├── 06-rolling-updates.md
-│   └── 07-ha-fault-tolerance.md
-└── labs/                        # Bài tập thực hành
+│   ├── 07-ha-fault-tolerance.md
+└── labs/
     ├── lab1-nginx-replicas/
-    │   └── docker-compose.yml
+        └── docker-compose.yml
     ├── lab2-load-balancing/
     │   ├── app/
     │   │   ├── server.js
     │   │   ├── package.json
     │   │   └── Dockerfile
     │   └── docker-compose.yml
-    └── lab3-rolling-update/
-        └── docker-compose.yml
+    ├── lab3-rolling-update/
+    │    └── docker-compose.yml
+    └── lab4-self-healing/
 ```
