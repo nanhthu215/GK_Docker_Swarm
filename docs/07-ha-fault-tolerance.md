@@ -6,7 +6,7 @@ Docker Swarm hoạt động theo mô hình **declarative** (khai báo): bạn n�
 
 ```
 Desired State:  replicas = 3
-Actual State:   replicas = 3  ✅ OK
+Actual State:   replicas = 3  ✅= OK
 
 ─── Nếu 1 container crash ───────────────────────
 
@@ -58,6 +58,27 @@ docker service ps my-web --no-trunc
 # old456   \_ my-web.1 nginx  worker1  Shutdown Failed    "task: non-zero exit (137)"
 ```
 
+### Demo nhanh trên máy local
+
+Đây là cách dễ nhất để chứng minh desired state reconciliation:
+
+```bash
+# 1. Deploy service 3 replicas
+docker stack deploy -c labs/lab4-self-healing/docker-compose.yml healstack
+
+# 2. Xem các container thuộc service
+docker ps --filter label=com.docker.swarm.service.name=healstack_web
+
+# 3. Chủ động kill 1 container
+docker kill <container-id>
+
+# 4. Quan sát Swarm tạo task mới
+docker service ps healstack_web
+docker service ls
+```
+
+Nếu service quay lại `3/3` sau vài giây thì đó chính là self-healing.
+
 ---
 
 ## 7.3 Khi Worker Node Crash
@@ -84,6 +105,8 @@ Swarm tự phục hồi (trong vài giây đến phút):
   Worker1:  [Web.1] [Web.2] [API.2] [API.3_new]
   Worker3:  [Web.4] [Web.5] [API.4] [Web.3_new]
 ```
+
+> Trên môi trường single-node local, rất khó minh họa đúng nghĩa "worker node crash". Vì vậy repo này dùng Lab 4 để demo chắc chắn phần **container crash / self-healing**, và kèm phần giải thích lý thuyết cho worker-node failover. Nếu có cluster nhiều node thật, có thể mở rộng demo bằng cách `drain` hoặc tắt hẳn một worker node.
 
 ### Kiểm tra trạng thái node:
 
@@ -117,7 +140,7 @@ Manager crash → Cluster mất khả năng quản lý
 M1 crash:
 → M2 và M3 phát hiện Leader mất (heartbeat timeout)
 → Bầu chọn Leader mới: M2 hoặc M3 trở thành Leader
-→ Cluster tiếp tục hoạt động bình thường ✅
+→ Cluster tiếp tục hoạt động bình thường 
 
 Cần 2/3 nodes alive → chịu được 1 manager crash
 ```
@@ -209,9 +232,9 @@ Task States with Healthcheck:
 ## 7.7 Best Practices cho High Availability
 
 ### Cluster setup:
-- ✅ Dùng **số lẻ managers** (3 hoặc 5)
-- ✅ Manager nodes trên **máy vật lý khác nhau** hoặc **availability zones** khác nhau
-- ✅ Manager nodes chỉ làm quản lý (không chạy app tasks)
+-  Dùng **số lẻ managers** (3 hoặc 5)
+-  Manager nodes trên **máy vật lý khác nhau** hoặc **availability zones** khác nhau
+-  Manager nodes chỉ làm quản lý (không chạy app tasks)
 
 ```bash
 # Ngăn manager chạy application tasks
@@ -219,16 +242,16 @@ docker node update --availability drain manager1
 ```
 
 ### Service configuration:
-- ✅ Luôn đặt `restart_policy`
-- ✅ Luôn đặt resource `limits` và `reservations`
-- ✅ Sử dụng `healthcheck` để phát hiện app hung
-- ✅ Dùng `update_config.failure_action: rollback`
-- ✅ `min_replicas ≥ 2` cho production services
+-  Luôn đặt `restart_policy`
+-  Luôn đặt resource `limits` và `reservations`
+-  Sử dụng `healthcheck` để phát hiện app hung
+-  Dùng `update_config.failure_action: rollback`
+-  `min_replicas ≥ 2` cho production services
 
 ### Data persistence:
-- ✅ Database dùng volume, gắn với node cố định (`placement constraints`)
-- ✅ Hoặc dùng external storage (NFS, cloud volumes)
-- ✅ Backup định kỳ volumes
+-  Database dùng volume, gắn với node cố định (`placement constraints`)
+-  Hoặc dùng external storage (NFS, cloud volumes)
+-  Backup định kỳ volumes
 
 ---
 
