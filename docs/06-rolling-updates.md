@@ -27,8 +27,8 @@ Step 2: [v2] [v1] [v1]   ← Cập nhật task 1 → v2
 Step 3: [v2] [v2] [v1]   ← Cập nhật task 2 → v2
 Step 4: [v2] [v2] [v2]   ← Cập nhật task 3 → v2
 
-→ Luôn có ít nhất 2/3 tasks running ✅
-→ Zero downtime ✅
+→ Luôn có ít nhất 2/3 tasks running
+→ Zero downtime
 ```
 
 ---
@@ -71,6 +71,16 @@ start-first:
   Nhược điểm: Cần thêm tài nguyên tạm thời
 ```
 
+### Điều kiện để "zero-downtime" thực sự xảy ra
+
+Chỉ đặt `update_config` thôi chưa đủ. Trong thực tế cần đồng thời thỏa các điều kiện sau:
+
+1. Service có từ **2 replicas trở lên** để khi một task đang update vẫn còn task khác phục vụ request.
+2. Ứng dụng có **startup time hợp lý** hoặc có `healthcheck` để Swarm chỉ chuyển lưu lượng khi task mới đã sẵn sàng.
+3. Nên ưu tiên `order: start-first` nếu tài nguyên cho phép, vì bản mới được khởi động trước khi bản cũ dừng.
+4. Ứng dụng phải hỗ trợ shutdown tương đối sạch, tránh mất request đang xử lý dở.
+5. Client test không nên reuse một kết nối duy nhất quá lâu nếu muốn quan sát rõ việc cập nhật từng replica.
+
 ---
 
 ## 6.4 Thực hiện Rolling Update
@@ -101,6 +111,11 @@ watch docker service ps my-web
 docker stack deploy -c docker-compose.yml my-stack
 # Swarm tự nhận diện thay đổi và thực hiện rolling update
 ```
+
+Trong bài demo, có thể dùng một trong hai cách:
+
+- `docker service update --image ...` khi muốn minh họa nhanh chỉ riêng service đó.
+- Sửa `docker-compose.yml` rồi chạy lại `docker stack deploy` khi muốn bám sát cách vận hành stack theo file khai báo.
 
 ---
 
