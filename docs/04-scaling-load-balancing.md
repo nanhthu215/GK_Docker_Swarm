@@ -2,7 +2,29 @@
 
 ## 4.1 Scaling trong Docker Swarm
 
-**Scaling** là khả năng tăng hoặc giảm số lượng bản sao (replicas) của một service.
+**Scaling** là khả năng thay đổi số lượng bản sao (replicas) hoặc tài nguyên của một dịch vụ để đáp ứng nhu cầu sử dụng thực tế.
+
+### Phân loại Scaling
+* **Horizontal Scaling (Scaling Out/In):** Đây là cơ chế chính của Swarm. Tăng hoặc giảm số lượng **replicas** (container) chạy cùng một image. Khi tải tăng, ta thêm container (Scale out); khi tải giảm, ta bớt container (Scale in).
+* **Vertical Scaling (Scaling Up/Down):** Thay đổi **tài nguyên** (CPU, RAM) cho các container hiện có. Trong Swarm, việc này thường yêu cầu cập nhật lại cấu hình dịch vụ thông qua lệnh `docker service update --limit-cpu...`.
+
+### Mục đích và Lợi ích
+* **Khả năng chịu tải (High Availability):** Khi có nhiều bản sao, nếu một container bị lỗi (crash), các bản sao còn lại vẫn tiếp tục phục vụ người dùng, giúp hệ thống không bị gián đoạn.
+* **Tối ưu tài nguyên:** Giúp hệ thống không bị lãng phí tài nguyên khi thấp điểm và tránh tình trạng nghẽn cổ chai khi cao điểm.
+* **Cân bằng tải (Load Balancing):** Kết hợp chặt chẽ với Routing Mesh để phân phối lưu lượng truy cập đều cho các bản sao đang hoạt động.
+
+### Trạng thái mong muốn (Desired State)
+Docker Swarm hoạt động theo mô hình quản lý trạng thái. Khi ta scale lên 5 replicas, Swarm sẽ duy trì "trạng thái mong muốn" này bằng mọi giá. Nếu người dùng vô tình xóa mất 1 container hoặc 1 node bị sập, Swarm sẽ tự động nhận diện sự sai lệch và khởi tạo lại container mới trên các tài nguyên còn lại để luôn đảm bảo đủ số lượng 5.
+
+### Docker Swarm có auto-scaling built-in không?
+
+**Không theo nghĩa metric-based như Kubernetes HPA.** Docker Swarm cho phép thay đổi số replicas rất nhanh, nhưng bản thân Swarm **không tự theo dõi CPU/RAM để tự động scale ngang** nếu không có công cụ hỗ trợ bên ngoài.
+
+| Kiểu scaling | Docker Swarm hỗ trợ thế nào? |
+|--------------|------------------------------|
+| **Manual scaling** | Hỗ trợ trực tiếp qua CLI / API |
+| **Scheduled scaling** | Hỗ trợ gián tiếp qua cron, CI/CD, script |
+| **Metric-based auto scaling** | Cần công cụ ngoài như Prometheus + script / webhook / pipeline |
 
 ### Scaling thủ công:
 
@@ -40,6 +62,34 @@ docker service scale my-web=2
 # Swarm tự chọn task để xóa và dọn dẹp
 ```
 
+### Chiến lược scale tự động trong thực tế
+
+Trong production, một luồng auto-scaling khả thi với Swarm thường là:
+
+1. Thu thập metric bằng Prometheus, cAdvisor, Node Exporter hoặc monitoring khác.
+2. Đặt ngưỡng, ví dụ CPU trung bình > 70% trong 5 phút.
+3. Khi vượt ngưỡng, một script hoặc pipeline gọi Docker API / CLI:
+
+```bash
+docker service update --replicas 6 my-web
+```
+
+4. Khi tải giảm ổn định trong một khoảng thời gian, automation scale-in về mức thấp hơn:
+
+```bash
+docker service update --replicas 3 my-web
+```
+
+Ví dụ pseudo-flow:
+
+```text
+Prometheus alert -> webhook -> script autoscale.sh
+  if cpu > 70% for 5m -> scale out +2 replicas
+  if cpu < 25% for 10m -> scale in -1 replica
+```
+
+> Kết luận quan trọng: Docker Swarm **hỗ trợ scale rất tốt**, nhưng nếu đề cập đến **tự động** scale theo tải thì phải nói rõ rằng cần thêm lớp automation bên ngoài.
+
 ---
 
 ## 4.2 Ingress Network (Routing Mesh)
@@ -74,6 +124,8 @@ docker service scale my-web=2
 | **Transparent** | Client không cần biết task ở node nào |
 | **Internal VIP** | Mỗi service có Virtual IP nội bộ |
 
+> Lưu ý: Routing Mesh thường phân phối khá đều giữa các replicas, nhưng trong thực tế không nên cam kết cứng rằng mỗi container sẽ nhận đúng số request bằng nhau ở mọi lần chạy. Kết quả còn phụ thuộc thời điểm task sẵn sàng, kiểu client, keep-alive và việc kết nối có được tái sử dụng hay không.
+
 ### Ví dụ:
 
 ```bash
@@ -81,9 +133,9 @@ docker service scale my-web=2
 docker service create --name web --replicas 3 -p 80:80 nginx
 
 # Dù request đến Worker1, Worker2, hay Manager đều OK!
-curl http://worker1-ip:80   # ✅
-curl http://worker2-ip:80   # ✅
-curl http://manager-ip:80   # ✅
+curl http://worker1-ip:80   
+curl http://worker2-ip:80   
+curl http://manager-ip:80   
 ```
 
 ---
@@ -165,7 +217,7 @@ done
 # Hostname: 3b4c5d6e7f8a   ← container 3
 ```
 
-> ✅ **Chứng minh:** Routing Mesh phân phối đều request qua 3 container khác nhau.
+>**Chứng minh:** Routing Mesh phân phối request qua nhiều container khác nhau; khi lặp lại đủ nhiều lần sẽ quan sát được nhiều hostname/instance cùng tham gia xử lý.
 
 ---
 
