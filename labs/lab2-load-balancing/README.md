@@ -2,11 +2,13 @@
 
 ## Mục tiêu
 
-Chứng minh **Ingress Routing Mesh** của Docker Swarm phân phối requests đều qua **5 container** khác nhau, bằng cách mỗi container trả về **hostname** của chính nó.
+Chứng minh **Ingress Routing Mesh** của Docker Swarm phân phối request qua **nhiều container** khác nhau, bằng cách mỗi container trả về **hostname** của chính nó.
 
 ---
 
 ## Cách thực hiện
+
+> Lưu ý: Lab này chạy trực tiếp được trên Swarm single-node ở máy local. Nếu triển khai trên Swarm nhiều node, image `swarm-lb-demo:1.0` phải được push lên registry chung hoặc được nạp sẵn trên tất cả worker nodes.
 
 ### Bước 1: Build image
 
@@ -58,7 +60,7 @@ done
 #### Windows PowerShell:
 ```powershell
 1..10 | ForEach-Object {
-    $response = Invoke-RestMethod -Uri "http://localhost:3000"
+    $response = Invoke-RestMethod -Uri "http://localhost:3000" -DisableKeepAlive
     Write-Host "Request $_`: hostname = $($response.hostname)"
 }
 ```
@@ -76,7 +78,7 @@ Request 8: hostname = c3d4e5f6a1b2   ← Container 3
 Request 9: hostname = d4e5f6a1b2c3   ← Container 4
 Request 10: hostname = e5f6a1b2c3d4  ← Container 5
 ```
-> ✅ **Kết quả:** 10 requests được phân phối qua 5 containers khác nhau theo kiểu round-robin → **Ingress Routing Mesh hoạt động!**
+> **Kết quả cần chứng minh:** trong 10 request phải xuất hiện nhiều `hostname` khác nhau và các hostname đó lặp lại theo thời gian, tức là request đã được Routing Mesh phân phối qua nhiều replicas. Không nên yêu cầu cứng rằng lúc nào cũng đúng `2 request/container`, vì điều đó còn phụ thuộc việc tái sử dụng connection và thời điểm task sẵn sàng.
 
 ### Bước 5: Xem header response
 
