@@ -161,7 +161,7 @@ Scenario: Deploy image lỗi
   Step 2: Task fails → Swarm chờ "monitor" (30s)
   Step 3: Vượt quá max_failure_ratio → trigger rollback
   Step 4: Swarm tự động rollback về nginx:1.24
-  Step 5: Service khôi phục ✅
+  Step 5: Service khôi phục
 
   Timeline:
   ─── nginx:1.24 ──── deploy broken ──┤ detect fail │── rollback ──► nginx:1.24 ───
@@ -194,7 +194,7 @@ watch -n 1 "docker service ps demo-web"
 
 # Bước 5: Kiểm tra service không bị downtime
 while true; do curl -s -o /dev/null -w "%{http_code}" http://localhost:8080; sleep 1; done
-# Phải luôn trả về 200 ✅
+# Phải luôn trả về 200 
 
 # Bước 6: Confirm version mới
 docker service inspect demo-web --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
