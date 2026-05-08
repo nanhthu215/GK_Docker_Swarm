@@ -25,6 +25,12 @@ Actual State:   replicas = 3  ✅ RESTORED
 
 ## 7.2 Khi Container Crash
 
+### Lưu ý về đơn vị quản lý
+- Trong Swarm, Manager không quản lý "container" trực tiếp mà quản lý các Tasks.
+- Task là đơn vị nhỏ nhất trong Swarm, nó bao gồm container và các lệnh thực thi đi kèm.
+
+Khi một task chết, Manager sẽ tạo một Task mới hoàn toàn (với ID mới) thay vì chỉ khởi động lại container cũ. Điều này đảm bảo tính sạch sẽ (clean state) cho môi trường thực thi.
+
 ```
 Scenario: Task đang chạy bị crash (OOM, process crash, etc.)
 
@@ -105,6 +111,7 @@ Swarm tự phục hồi (trong vài giây đến phút):
   Worker1:  [Web.1] [Web.2] [API.2] [API.3_new]
   Worker3:  [Web.4] [Web.5] [API.4] [Web.3_new]
 ```
+> Cơ chế phát hiện: Manager và các Worker giao tiếp với nhau qua tín hiệu Gossip/Heartbeat. Nếu sau một khoảng thời gian (mặc định khoảng 5 giây) Manager không nhận được tín hiệu phản hồi từ Worker, nó sẽ đánh dấu node đó là `Down` và lập tức bắt đầu quá trình phục hồi (rescheduling) các task sang node khác.
 
 > Trên môi trường single-node local, rất khó minh họa đúng nghĩa "worker node crash". Vì vậy repo này dùng Lab 4 để demo chắc chắn phần **container crash / self-healing**, và kèm phần giải thích lý thuyết cho worker-node failover. Nếu có cluster nhiều node thật, có thể mở rộng demo bằng cách `drain` hoặc tắt hẳn một worker node.
 
