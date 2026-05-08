@@ -24,14 +24,16 @@ docker info
 ## 📁 Di chuyển vào thư mục dự án
 
 ```powershell
-cd "C:\Users\PC1\Documents\Downloads\GK"
+cd "<duong-dan-den-repo>\GK_Docker_Swarm"
 ```
 
----
+> Gợi ý: thay `<duong-dan-den-repo>` bằng thư mục thật trên máy của bạn. Ví dụ: `D:\FullStack`.
 
 ---
 
-# 🔵 LAB 1 – Nginx 3 Replicas
+---
+
+#  LAB 1 – Nginx 3 Replicas
 
 ## Bước 1: Khởi tạo Docker Swarm
 
@@ -69,7 +71,7 @@ abc123xyz *   DESKTOP-XXXXX   Ready     Active         Leader
 ## Bước 3: Di chuyển vào thư mục Lab 1
 
 ```powershell
-cd "C:\Users\PC1\Documents\Downloads\GK\labs\lab1-nginx-replicas"
+cd "<duong-dan-den-repo>\GK_Docker_Swarm\labs\lab1-nginx-replicas"
 ```
 
 ## Bước 4: Triển khai Stack
@@ -146,7 +148,7 @@ docker stack rm webstack
 ## Bước 1: Di chuyển vào thư mục Lab 2
 
 ```powershell
-cd "C:\Users\PC1\Documents\Downloads\GK\labs\lab2-load-balancing"
+cd "<duong-dan-den-repo>\GK_Docker_Swarm\labs\lab2-load-balancing"
 ```
 
 ## Bước 2: Build Docker image
@@ -223,7 +225,7 @@ Write-Host ""
 $hostnames = @{}
 
 for ($i = 1; $i -le 10; $i++) {
-    $response = Invoke-RestMethod -Uri "http://localhost:3000" -Method Get
+    $response = Invoke-RestMethod -Uri "http://localhost:3000" -Method Get -DisableKeepAlive
     $hostname = $response.hostname
     
     # Đếm số lần mỗi container được gọi
@@ -267,7 +269,7 @@ Request 10 →  Container: e5f6a1b2c3d4
   Container e5f6a1b2c3d4 : 2 requests
 ```
 
-> ✅ **5 container khác nhau, mỗi cái nhận 2 requests → Load Balancing hoạt động!**
+> ✅ **Điều cần chứng minh:** nhiều hostname khác nhau xuất hiện trong 10 request, nghĩa là Routing Mesh đã phân phối tải qua nhiều replicas. Thực tế không nên yêu cầu cứng rằng lúc nào cũng đúng 2 request/container.
 
 **Hoặc thử trình duyệt:** Mở http://localhost:3000 và nhấn F5 nhiều lần → thấy `hostname` thay đổi.
 
@@ -283,12 +285,12 @@ docker stack rm lbstack
 
 # 🟠 LAB 3 – Rolling Update Demo
 
-> **Mục tiêu:** Cập nhật từ `nginx:1.23` → `nginx:1.24`, quan sát service không bị gián đoạn.
+> **Mục tiêu:** Cập nhật từ `nginx:1.23-alpine` → `nginx:1.24-alpine`, quan sát service không bị gián đoạn.
 
 ## Bước 1: Di chuyển vào thư mục Lab 3
 
 ```powershell
-cd "C:\Users\PC1\Documents\Downloads\GK\labs\lab3-rolling-update"
+cd "<duong-dan-den-repo>\GK_Docker_Swarm\labs\lab3-rolling-update"
 ```
 
 ## Bước 2: Đảm bảo Swarm đang chạy
@@ -297,7 +299,7 @@ cd "C:\Users\PC1\Documents\Downloads\GK\labs\lab3-rolling-update"
 docker node ls
 ```
 
-## Bước 3: Deploy Stack với nginx:1.23
+## Bước 3: Deploy Stack với nginx:1.23-alpine
 
 ```powershell
 docker stack deploy -c docker-compose.yml rollstack
@@ -307,14 +309,14 @@ docker stack deploy -c docker-compose.yml rollstack
 ```powershell
 docker service ls
 # NAME             MODE         REPLICAS   IMAGE
-# rollstack_web    replicated   3/3        nginx:1.23
+# rollstack_web    replicated   3/3        nginx:1.23-alpine
 ```
 
-## Bước 4: Xác nhận đang chạy nginx:1.23
+## Bước 4: Xác nhận đang chạy nginx:1.23-alpine
 
 ```powershell
 docker service ps rollstack_web
-# Tất cả 3 tasks đều IMAGE = nginx:1.23
+# Tất cả 3 tasks đều IMAGE = nginx:1.23-alpine
 ```
 
 ## Bước 5: Mở 2 PowerShell windows riêng
@@ -353,7 +355,7 @@ while ($true) {
 ### 🖥️ Window C (mới) – Chạy lệnh update:
 
 ```powershell
-cd "C:\Users\PC1\Documents\Downloads\GK\labs\lab3-rolling-update"
+cd "<duong-dan-den-repo>\GK_Docker_Swarm\labs\lab3-rolling-update"
 
 docker service update `
     --image nginx:1.24-alpine `
@@ -371,23 +373,23 @@ Bạn sẽ thấy từng task được cập nhật lần lượt:
 ```
 === Docker Service Tasks ===
 ID          NAME               IMAGE          NODE          STATE
-NEW001      rollstack_web.1    nginx:1.24     DESKTOP-XXX   Starting    ← đang update
-OLD001      \_ rollstack_web.1 nginx:1.23     DESKTOP-XXX   Shutdown    ← task cũ
-OLD002      rollstack_web.2    nginx:1.23     DESKTOP-XXX   Running     ← chưa update
-OLD003      rollstack_web.3    nginx:1.23     DESKTOP-XXX   Running     ← chưa update
+NEW001      rollstack_web.1    nginx:1.24-alpine     DESKTOP-XXX   Starting    ← đang update
+OLD001      \_ rollstack_web.1 nginx:1.23-alpine     DESKTOP-XXX   Shutdown    ← task cũ
+OLD002      rollstack_web.2    nginx:1.23-alpine     DESKTOP-XXX   Running     ← chưa update
+OLD003      rollstack_web.3    nginx:1.23-alpine     DESKTOP-XXX   Running     ← chưa update
 
 ... 15 giây sau ...
 
-NEW001      rollstack_web.1    nginx:1.24     DESKTOP-XXX   Running   ✅
-NEW002      rollstack_web.2    nginx:1.24     DESKTOP-XXX   Starting    ← đang update
-OLD002      \_ rollstack_web.2 nginx:1.23     DESKTOP-XXX   Shutdown
-OLD003      rollstack_web.3    nginx:1.23     DESKTOP-XXX   Running
+NEW001      rollstack_web.1    nginx:1.24-alpine     DESKTOP-XXX   Running   ✅
+NEW002      rollstack_web.2    nginx:1.24-alpine     DESKTOP-XXX   Starting    ← đang update
+OLD002      \_ rollstack_web.2 nginx:1.23-alpine     DESKTOP-XXX   Shutdown
+OLD003      rollstack_web.3    nginx:1.23-alpine     DESKTOP-XXX   Running
 
 ... 15 giây sau ...
 
-NEW001      rollstack_web.1    nginx:1.24     DESKTOP-XXX   Running   ✅
-NEW002      rollstack_web.2    nginx:1.24     DESKTOP-XXX   Running   ✅
-NEW003      rollstack_web.3    nginx:1.24     DESKTOP-XXX   Running   ✅  ← hoàn thành!
+NEW001      rollstack_web.1    nginx:1.24-alpine     DESKTOP-XXX   Running   ✅
+NEW002      rollstack_web.2    nginx:1.24-alpine     DESKTOP-XXX   Running   ✅
+NEW003      rollstack_web.3    nginx:1.24-alpine     DESKTOP-XXX   Running   ✅  ← hoàn thành!
 ```
 
 ## Bước 8: Quan sát Window B
@@ -409,7 +411,7 @@ docker service inspect rollstack_web --format "{{.Spec.TaskTemplate.ContainerSpe
 # Output: nginx:1.24-alpine@sha256:...  ← đã cập nhật thành công!
 ```
 
-## Bước 10 (Tùy chọn): Rollback về nginx:1.23
+## Bước 10 (Tùy chọn): Rollback về nginx:1.23-alpine
 
 ```powershell
 docker service rollback rollstack_web
@@ -431,13 +433,123 @@ docker stack rm rollstack
 
 ---
 
+# 🔴 LAB 4 – Self-Healing & Fault Tolerance
+
+> **Mục tiêu:** Kill thủ công 1 container của service đang chạy 3 replicas, rồi quan sát Docker Swarm tự tạo task mới để đưa service quay lại trạng thái `3/3`.
+
+## Bước 1: Di chuyển vào thư mục Lab 4
+
+```powershell
+cd "<duong-dan-den-repo>\GK_Docker_Swarm\labs\lab4-self-healing"
+```
+
+## Bước 2: Đảm bảo Swarm đang chạy
+
+```powershell
+docker node ls
+```
+
+## Bước 3: Deploy stack
+
+```powershell
+docker stack deploy -c docker-compose.yml healstack
+```
+
+## Bước 4: Chờ service sẵn sàng
+
+```powershell
+docker service ls
+```
+
+**Kết quả mong đợi:**
+```
+NAME            MODE         REPLICAS   IMAGE
+healstack_web   replicated   3/3        nginx:1.24-alpine
+```
+
+## Bước 5: Xem tasks và container IDs
+
+```powershell
+docker service ps healstack_web
+
+docker ps --filter label=com.docker.swarm.service.name=healstack_web --format "table {{.ID}}`t{{.Names}}`t{{.Status}}"
+```
+
+## Bước 6: Mở 2 PowerShell windows để theo dõi
+
+### 🖥️ Window A – Theo dõi service tasks
+
+```powershell
+while ($true) {
+    Clear-Host
+    docker service ps healstack_web
+    Start-Sleep 2
+}
+```
+
+### 🖥️ Window B – Theo dõi HTTP uptime
+
+```powershell
+while ($true) {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8081" -UseBasicParsing -TimeoutSec 3
+        Write-Host "$(Get-Date -Format 'HH:mm:ss') -> HTTP $($r.StatusCode)" -ForegroundColor Green
+    } catch {
+        Write-Host "$(Get-Date -Format 'HH:mm:ss') -> ERROR" -ForegroundColor Red
+    }
+    Start-Sleep 1
+}
+```
+
+## Bước 7: Kill 1 container ở Window C
+
+Chọn một `CONTAINER ID` ở bước 5 rồi chạy:
+
+```powershell
+docker kill <container-id>
+```
+
+## Bước 8: Quan sát cơ chế tự phục hồi
+
+Ở Window A, bạn sẽ thấy task cũ bị `Shutdown` và một task mới được tạo:
+
+```
+ID          NAME               IMAGE               NODE          DESIRED STATE   CURRENT STATE
+new789      healstack_web.1    nginx:1.24-alpine  DESKTOP-XXX   Running         Starting 2s ago
+old123      \_ healstack_web.1 nginx:1.24-alpine  DESKTOP-XXX   Shutdown        Failed 3s ago
+t2def       healstack_web.2    nginx:1.24-alpine  DESKTOP-XXX   Running         Running 2m ago
+t3ghi       healstack_web.3    nginx:1.24-alpine  DESKTOP-XXX   Running         Running 2m ago
+```
+
+Sau vài giây, kiểm tra lại:
+
+```powershell
+docker service ls
+docker service ps healstack_web
+```
+
+**Kết quả mong đợi:** service quay lại `3/3`.
+
+## Dọn dẹp Lab 4
+
+```powershell
+# Dừng monitoring loops bằng Ctrl+C trong Window A và B
+
+# Xóa stack
+docker stack rm healstack
+```
+
+---
+
+---
+
 # 🧹 Dọn dẹp toàn bộ
 
 Sau khi demo xong, nếu muốn reset hoàn toàn:
 
 ```powershell
 # Xóa tất cả stacks (nếu còn)
-docker stack rm webstack lbstack rollstack
+docker stack rm webstack lbstack rollstack healstack
 
 # Chờ 10 giây để containers dừng
 Start-Sleep 10
