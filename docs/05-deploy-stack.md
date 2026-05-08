@@ -38,7 +38,14 @@ services:
       - KEY=VALUE
     volumes:
       - <volume-name>:<container-path>
-    
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s # (Tùy chọn) Thời gian chờ app khởi động xong mới bắt đầu check
+      
     # ↓ Phần quan trọng nhất cho Swarm ↓
     deploy:
       mode: replicated          # hoặc global
@@ -87,6 +94,7 @@ volumes:
   <volume-name>:
     driver: local
 ```
+- Việc sử dụng constraints giúp tách biệt môi trường: ví dụ các dịch vụ xử lý dữ liệu (API, Worker) chạy trên Worker nodes, trong khi các dịch vụ quản trị hoặc Database quan trọng có thể được chỉ định chạy trên Manager nodes để đảm bảo an toàn.
 ---
 ## 5.3 Các lệnh quản lý Stack
 
