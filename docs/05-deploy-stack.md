@@ -13,10 +13,10 @@ Stack: my-app
 ```
 
 ### Tại sao dùng Stack?
-- ✅ Quản lý nhiều services như một đơn vị
-- ✅ Khai báo toàn bộ infrastructure trong 1 file
-- ✅ Version control được
-- ✅ Tái sử dụng cùng file cho nhiều môi trường
+- Quản lý nhiều services như một đơn vị
+- Khai báo toàn bộ infrastructure trong 1 file
+- Version control được
+- Tái sử dụng cùng file cho nhiều môi trường
 
 ---
 
@@ -87,10 +87,39 @@ volumes:
   <volume-name>:
     driver: local
 ```
+---
+## 5.3 Các lệnh quản lý Stack
+
+```bash
+# ── Khởi tạo Swarm ──────────────────────────────────────
+docker swarm init
+# Hoặc chỉ định IP nếu có nhiều interface:
+docker swarm init --advertise-addr 192.168.1.100
+
+# ── Triển khai / Cập nhật Stack ─────────────────────────
+docker stack deploy -c docker-compose.yml my-stack
+# -c: chỉ định file compose
+# my-stack: tên stack (sẽ prefix vào tên service)
+
+# ── Kiểm tra Stack ──────────────────────────────────────
+docker stack ls                    # Danh sách stacks
+docker stack ps my-stack           # Danh sách tasks trong stack
+docker stack services my-stack     # Danh sách services trong stack
+
+# ── Xem logs ────────────────────────────────────────────
+docker service logs my-stack_api
+docker service logs -f my-stack_api  # Follow (real-time)
+
+# ── Scale một service trong stack ───────────────────────
+docker service scale my-stack_api=5
+
+# ── Xóa Stack ───────────────────────────────────────────
+docker stack rm my-stack
+```
 
 ---
 
-## 5.3 Ví dụ thực tế: Full Stack Application
+## 5.4 Ví dụ thực tế: Full Stack Application
 
 ```yaml
 # docker-compose.yml – Production Stack
@@ -208,38 +237,12 @@ secrets:
 
 ---
 
-## 5.4 Các lệnh quản lý Stack
-
-```bash
-# ── Khởi tạo Swarm ──────────────────────────────────────
-docker swarm init
-# Hoặc chỉ định IP nếu có nhiều interface:
-docker swarm init --advertise-addr 192.168.1.100
-
-# ── Triển khai / Cập nhật Stack ─────────────────────────
-docker stack deploy -c docker-compose.yml my-stack
-# -c: chỉ định file compose
-# my-stack: tên stack (sẽ prefix vào tên service)
-
-# ── Kiểm tra Stack ──────────────────────────────────────
-docker stack ls                    # Danh sách stacks
-docker stack ps my-stack           # Danh sách tasks trong stack
-docker stack services my-stack     # Danh sách services trong stack
-
-# ── Xem logs ────────────────────────────────────────────
-docker service logs my-stack_api
-docker service logs -f my-stack_api  # Follow (real-time)
-
-# ── Scale một service trong stack ───────────────────────
-docker service scale my-stack_api=5
-
-# ── Xóa Stack ───────────────────────────────────────────
-docker stack rm my-stack
-```
-
----
-
 ## 5.5 Khác biệt: docker-compose.yml cho Compose vs Swarm
+
+### Sự khác biệt với Docker Compose:
+
+  - `docker-compose` dùng để quản lý các container trên một node duy nhất (máy local).
+  - `docker stack deploy` dùng để triển khai các services lên toàn bộ cụm Swarm (multi-node).
 
 | Tính năng | Compose | Swarm Stack |
 |-----------|---------|-------------|
@@ -250,3 +253,14 @@ docker stack rm my-stack
 | Secrets | Volume mount | Docker Secrets |
 
 > ⚠️ **Lưu ý:** Khi dùng `docker stack deploy`, phần `build:` trong compose file bị **bỏ qua hoàn toàn**. Image phải được build sẵn và push lên registry trước.
+
+### Lưu ý thêm cho môi trường multi-node
+
+Với Swarm nhiều máy, mọi node có khả năng chạy task đều phải lấy được image. Vì vậy:
+
+- Nếu image là image public như `nginx:1.24-alpine` thì các node tự pull được từ Docker Hub.
+- Nếu image là image tự build như `swarm-lb-demo:1.0` thì phải:
+  - push image lên một registry chung, hoặc
+  - nạp image thủ công vào tất cả các node.
+
+Nếu không làm bước này, service có thể deploy thành công ở manager nhưng task trên worker sẽ bị `Rejected` hoặc `No such image`.
