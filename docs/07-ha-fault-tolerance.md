@@ -1,290 +1,133 @@
-# 7. High Availability & Fault Tolerance
+# 7. Tính sẵn sàng cao và Khả năng chịu lỗi (High Availability & Fault Tolerance)
 
-## 7.1 Desired State Reconciliation
-
-Docker Swarm hoạt động theo mô hình **declarative** (khai báo): bạn nói với Swarm *"tôi muốn 3 bản sao nginx"*, và Swarm **liên tục đảm bảo** trạng thái thực tế khớp với trạng thái mong muốn.
-
-```
-Desired State:  replicas = 3
-Actual State:   replicas = 3  ✅= OK
-
-─── Nếu 1 container crash ───────────────────────
-
-Desired State:  replicas = 3
-Actual State:   replicas = 2  ❌ MISMATCH
-
-→ Swarm Manager phát hiện → Tạo task mới → Deploy lên node phù hợp
-
-Desired State:  replicas = 3
-Actual State:   replicas = 3  ✅ RESTORED
-```
-
-**Quá trình này diễn ra tự động, liên tục, không cần can thiệp thủ công.**
+Đảm bảo dịch vụ vận hành liên tục 24/7 dưới sự tác động của các sự cố phần cứng hoặc phần mềm là bài toán kinh điển của kiến trúc hệ thống phân tán. Docker Swarm giải quyết triệt để bài toán này thông qua tính năng tự động phục hồi trạng thái (Desired State Reconciliation) kết hợp với cấu trúc phân quyền chịu lỗi đa lớp.
 
 ---
 
-## 7.2 Khi Container Crash
+## 7.1. Cơ chế đối chiếu trạng thái mong muốn (Desired State Reconciliation)
 
-### Lưu ý về đơn vị quản lý
-- Trong Swarm, Manager không quản lý "container" trực tiếp mà quản lý các Tasks.
-- Task là đơn vị nhỏ nhất trong Swarm, nó bao gồm container và các lệnh thực thi đi kèm.
+Bản chất hoạt động của Docker Swarm tuân theo mô hình khai báo trạng thái (Declarative Model). Người quản trị hệ thống không đưa ra mệnh lệnh trực tiếp cho hệ thống thực thi việc tạo lập container. Thay vào đó, họ khai báo trạng thái mục tiêu, ví dụ: "hệ thống phải luôn duy trì 3 bản sao của ứng dụng".
 
-Khi một task chết, Manager sẽ tạo một Task mới hoàn toàn (với ID mới) thay vì chỉ khởi động lại container cũ. Điều này đảm bảo tính sạch sẽ (clean state) cho môi trường thực thi.
-
-```
-Scenario: Task đang chạy bị crash (OOM, process crash, etc.)
-
-Before:
-  Worker1: [Task 1 - RUNNING] [Task 2 - RUNNING]
-  Worker2: [Task 3 - RUNNING]
-
-Task 1 crashes:
-  Worker1: [Task 1 - FAILED] [Task 2 - RUNNING]
-  Worker2: [Task 3 - RUNNING]
-
-Swarm detects (trong vài giây):
-  Worker1: [Task 1 - SHUTDOWN] [Task 1_new - STARTING] [Task 2 - RUNNING]
-  Worker2: [Task 3 - RUNNING]
-
-After recovery:
-  Worker1: [Task 1_new - RUNNING] [Task 2 - RUNNING]
-  Worker2: [Task 3 - RUNNING]
-  
-✅ Service luôn có 3 replicas
-```
-
-### Xem lịch sử task (kể cả đã chết):
-
-```bash
-docker service ps my-web --no-trunc
-
-# Output:
-# ID       NAME       IMAGE   NODE     DESIRED  CURRENT    ERROR
-# new123   my-web.1   nginx   worker1  Running  Running    
-# old456   \_ my-web.1 nginx  worker1  Shutdown Failed    "task: non-zero exit (137)"
-```
-
-### Demo nhanh trên máy local
-
-Đây là cách dễ nhất để chứng minh desired state reconciliation:
-
-```bash
-# 1. Deploy service 3 replicas
-docker stack deploy -c labs/lab4-self-healing/docker-compose.yml healstack
-
-# 2. Xem các container thuộc service
-docker ps --filter label=com.docker.swarm.service.name=healstack_web
-
-# 3. Chủ động kill 1 container
-docker kill <container-id>
-
-# 4. Quan sát Swarm tạo task mới
-docker service ps healstack_web
-docker service ls
-```
-
-Nếu service quay lại `3/3` sau vài giây thì đó chính là self-healing.
+Cơ chế tự động đối chiếu:
+Manager Node liên tục vận hành một vòng lặp kiểm tra ngầm định (Reconciliation Loop). Nhiệm vụ cốt lõi của vòng lặp này là đối chiếu trạng thái thực tế hiện hành (Actual State) với trạng thái lý tưởng đã được khai báo ban đầu (Desired State).
+Trong điều kiện hoạt động ổn định, trạng thái thực tế khớp hoàn toàn với trạng thái mong muốn. Tuy nhiên, khi xảy ra sự cố ngắt kết nối hoặc tràn bộ nhớ, dẫn đến sự thiếu hụt cục bộ về số lượng bản sao ứng dụng, hệ thống đối chiếu sẽ lập tức phát hiện sự sai lệch. Ngay sau đó, Manager kích hoạt chuỗi hành động bù đắp: hệ thống tự động khởi tạo thêm các tác vụ mới và phân bổ xuống những Worker Node đang rảnh rỗi nhằm khôi phục nguyên vẹn trạng thái lý tưởng. Toàn bộ chu trình này diễn ra hoàn toàn tự động, tuần hoàn liên tục mà không đòi hỏi bất kỳ sự can thiệp thủ công nào từ phía nhân sự vận hành.
 
 ---
 
-## 7.3 Khi Worker Node Crash
+## 7.2. Phân tích kịch bản sự cố cấp độ Container (Task Crash)
 
+Kịch bản mô phỏng: 
+Trong quá trình vận hành, một tiến trình ứng dụng bên trong container bị kết thúc đột ngột do vượt quá giới hạn bộ nhớ (Out of Memory - OOM) hoặc do phát sinh ngoại lệ mã nguồn (Application Crash).
+
+Quy trình phản ứng của hệ thống:
+- Bước 1: Worker Node có nhiệm vụ giám sát container đó phát hiện tiến trình đã kết thúc với mã lỗi. Node lập tức cập nhật trạng thái của tác vụ (Task) từ đang hoạt động sang trạng thái thất bại (FAILED).
+- Bước 2: Thông qua giao thức liên lạc nhịp tim (Heartbeat), Manager Node nắm bắt được sự kiện tác vụ bị lỗi. Động thái này dẫn đến sự mất cân bằng trong hệ thống đối chiếu: số lượng bản sao thực tế đã giảm xuống dưới mức yêu cầu của dịch vụ.
+- Bước 3: Thay vì cố gắng khởi động lại tác vụ mang mã lỗi, Manager áp dụng chính sách gạch bỏ hoàn toàn tác vụ đó, đồng thời khởi tạo một tác vụ mới tinh với mã định danh hoàn toàn mới.
+- Bước 4: Tác vụ mới được bộ lập lịch (Scheduler) phân bổ cho một Worker Node phù hợp. Tiến trình ứng dụng được khởi động lại từ đầu, bù đắp chính xác phần năng lực xử lý bị khuyết thiếu.
+
+Quá trình phát hiện và tái thiết lập này diễn ra cực kỳ nhanh chóng, thông thường chỉ mất vài giây, đảm bảo tổng thể dịch vụ luôn trong trạng thái sẵn sàng phục vụ lượng truy cập từ bên ngoài.
+
+### 7.2.1. Vai trò sống còn của HEALTHCHECK
+Nếu chỉ dựa vào sự kiện tiến trình kết thúc (Exit Code), Swarm sẽ không thể phát hiện các lỗi "chết lâm sàng" - ví dụ ứng dụng Java bị treo (deadlock), hoặc Web Server bị quá tải kết nối nhưng tiến trình hệ điều hành vẫn đang chạy. Để khắc phục, thực tế sản xuất bắt buộc phải định nghĩa chỉ thị `HEALTHCHECK` trong Dockerfile hoặc tệp Compose:
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
 ```
-Cluster: 1 Manager + 3 Workers (9 tasks tổng)
+Nhờ cơ chế này, Swarm chủ động gọi kiểm tra định kỳ. Nếu ứng dụng không phản hồi thành công sau 3 lần (`retries`), Swarm lập tức đánh dấu Task đó là trạng thái `Unhealthy` và tự động tiêu diệt để tạo Task mới thay thế, bất kể tiến trình gốc bên trong có còn chạy hay không.
 
-Trước sự cố:
-  Manager:  [API.1]
-  Worker1:  [Web.1] [Web.2] [API.2]
-  Worker2:  [Web.3] [API.3] [Redis.1]
-  Worker3:  [Web.4] [Web.5] [API.4]
+---
 
-Worker2 sập:
-  Manager:  [API.1]
-  Worker1:  [Web.1] [Web.2] [API.2]
-  Worker2:  ❌ OFFLINE
-  Worker3:  [Web.4] [Web.5] [API.4]
-  
-  Missing: [Web.3] [API.3] [Redis.1]
+## 7.3. Phân tích kịch bản sự cố cấp độ Máy chủ vật lý (Worker Node Crash)
 
-Swarm tự phục hồi (trong vài giây đến phút):
-  Manager:  [API.1] [Redis.1_new]    ← Redis.1 được tạo lại
-  Worker1:  [Web.1] [Web.2] [API.2] [API.3_new]
-  Worker3:  [Web.4] [Web.5] [API.4] [Web.3_new]
-```
-> Cơ chế phát hiện: Manager và các Worker giao tiếp với nhau qua tín hiệu Gossip/Heartbeat. Nếu sau một khoảng thời gian (mặc định khoảng 5 giây) Manager không nhận được tín hiệu phản hồi từ Worker, nó sẽ đánh dấu node đó là `Down` và lập tức bắt đầu quá trình phục hồi (rescheduling) các task sang node khác.
+Kịch bản mô phỏng: 
+Một thiết bị phần cứng đóng vai trò Worker Node đột ngột mất nguồn điện, đứt cáp mạng hoặc hỏng ổ cứng vật lý, kéo theo sự sụp đổ của toàn bộ hệ thống ứng dụng đang hoạt động trên nó.
 
-> Trên môi trường single-node local, rất khó minh họa đúng nghĩa "worker node crash". Vì vậy repo này dùng Lab 4 để demo chắc chắn phần **container crash / self-healing**, và kèm phần giải thích lý thuyết cho worker-node failover. Nếu có cluster nhiều node thật, có thể mở rộng demo bằng cách `drain` hoặc tắt hẳn một worker node.
+Quy trình phản ứng của hệ thống:
+- Bước 1: Thông qua giao thức giám sát Gossip được thiết lập trên cổng mạng 7946, các Node khác trong cụm mạng nội bộ ngừng nhận được tín hiệu hồi đáp từ máy chủ đang gặp sự cố.
+- Bước 2: Manager Node tiếp nhận thông tin và chuyển trạng thái đánh giá máy chủ đó thành ngoại tuyến (Unreachable).
+- Bước 3: Đánh giá quy mô thiệt hại. Manager truy xuất cơ sở dữ liệu để liệt kê toàn bộ các tác vụ đang được phân bổ trên máy chủ ngoại tuyến và đồng loạt đánh dấu chúng là thất bại.
+- Bước 4: Để tái lập trạng thái cân bằng, Manager tự động tạo ra một loạt các tác vụ thay thế, sau đó lập lịch triển khai khối lượng công việc này và phân bổ đều cho các thiết bị Worker Node còn lại đang hoạt động trong cụm.
 
-### Kiểm tra trạng thái node:
+Thông qua cơ chế thiết kế này, một thảm họa lỗi phần cứng mức độ máy chủ vật lý được hệ thống chuyển hóa gọn gàng thành một chu trình cấp phát ứng dụng phần mềm đơn giản, giảm thiểu đáng kể rủi ro gián đoạn dịch vụ trên bình diện tổng thể doanh nghiệp.
 
-```bash
-docker node ls
-# ID          HOSTNAME   STATUS  AVAILABILITY  MANAGER STATUS
-# abc123 *   manager1   Ready   Active        Leader
-# def456     worker1    Ready   Active        
-# ghi789     worker2    Down    Active        ← Node sập!
-# jkl012     worker3    Ready   Active        
+Sơ đồ minh họa quá trình di tản Task khi Node gặp sự cố:
+```mermaid
+graph TD
+    subgraph TrangThaiBanDau ["Trạng thái bình thường (Trước sự cố)"]
+        direction TB
+        W1_A["⚙️ Worker 1"] --- T1_A["📦 Task Web 1"]
+        W2_A["⚙️ Worker 2"] --- T2_A["📦 Task Web 2"]
+        W3_A["⚙️ Worker 3"] --- T3_A["📦 Task Web 3"]
+    end
+
+    subgraph TrangThaiSuCo ["Trạng thái phục hồi (Sau khi Worker 2 Crash)"]
+        direction TB
+        W1_B["⚙️ Worker 1"] --- T1_B["📦 Task Web 1"]
+        W1_B --- T2_B_NEW["📦 Task Web 2 (Tạo mới bù đắp)"]
+        
+        W2_B["❌ Worker 2 (Offline)"] -.- T2_B["💀 Task Web 2 (Bị hủy)"]
+        
+        W3_B["⚙️ Worker 3"] --- T3_B["📦 Task Web 3"]
+    end
+
+    TrangThaiBanDau ==>|Worker 2 sập nguồn| TrangThaiSuCo
+
+    classDef normal fill:#d9ead3,stroke:#93c47d,stroke-width:2px
+    classDef crash fill:#f4cccc,stroke:#cc0000,stroke-width:2px,stroke-dasharray: 5 5
+    classDef new fill:#fff2cc,stroke:#d6b656,stroke-width:2px
+    
+    class W1_A,W2_A,W3_A,W1_B,W3_B normal
+    class W2_B,T2_B crash
+    class T2_B_NEW new
 ```
 
 ---
 
-## 7.4 Khi Manager Node Crash
+## 7.4. Phân tích kịch bản sự cố cấp độ Lõi điều khiển (Manager Node Crash)
 
-### Single Manager (không khuyến nghị cho production):
+Kịch bản mô phỏng: 
+Hệ thống máy chủ trung tâm đảm nhiệm vai trò Manager Node gặp sự cố nghiêm trọng.
 
-```
-Manager crash → Cluster mất khả năng quản lý
-→ Tasks đang chạy vẫn tiếp tục (containers không dừng)
-→ Nhưng KHÔNG THỂ: scale, update, deploy mới
-→ Cần phục hồi manager hoặc khởi tạo swarm mới
-```
-
-### Multi-Manager với Raft (recommended):
-
-```
-3 Managers: M1 (Leader), M2 (Follower), M3 (Follower)
-
-M1 crash:
-→ M2 và M3 phát hiện Leader mất (heartbeat timeout)
-→ Bầu chọn Leader mới: M2 hoặc M3 trở thành Leader
-→ Cluster tiếp tục hoạt động bình thường 
-
-Cần 2/3 nodes alive → chịu được 1 manager crash
-```
-
-```bash
-# Kiểm tra trạng thái manager
-docker node ls
-# MANAGER STATUS: Leader / Reachable / Unreachable
-```
+Quy trình phản ứng dựa trên thuật toán đồng thuận Raft:
+- Trường hợp kiến trúc lỗi thời có duy nhất một Manager Node: Sự sụp đổ của Manager này sẽ khiến toàn bộ cụm mất khả năng quản lý. Mặc dù các ứng dụng đã được khởi chạy trên các Worker Node vẫn tiếp tục phục vụ người dùng, quản trị viên hoàn toàn bất lực trong việc cập nhật phần mềm mới, thu phóng quy mô ứng dụng hoặc xem danh sách dịch vụ. Mô hình điểm lỗi duy nhất (SPOF) này tuyệt đối không được khuyến nghị cho môi trường sản xuất.
+- Trường hợp kiến trúc đề xuất với nhiều Manager Node (ví dụ cụm 3 Manager): Thuật toán Raft sẽ bầu ra một hệ thống thiết bị bao gồm một máy chủ lãnh đạo (Leader) và hai máy chủ cấp dưới (Follower). Nếu máy chủ Leader bất ngờ sụp đổ:
+  - Giai đoạn 1: Các thiết bị Follower phát hiện sự gián đoạn kết nối định kỳ đối với thiết bị Leader.
+  - Giai đoạn 2: Các Follower tự động thay đổi trạng thái sang ứng cử viên (Candidate) và ngay lập tức tổ chức một cuộc bầu cử hệ thống nội bộ.
+  - Giai đoạn 3: Thiết bị nào nhận được sự đồng thuận đa số (Quorum) sẽ chính thức trở thành Leader mới và nắm quyền điều hành toàn bộ cụm mạng.
+  - Quá trình chuyển giao và tiếp quản quyền lực diễn ra tự động trong khoảng thời gian rất ngắn, đảm bảo cụm máy chủ duy trì được sự điều khiển tập trung mà không gây gián đoạn quyền quản trị vận hành.
 
 ---
 
-## 7.5 Restart Policy
+## 7.5. Tiêu chuẩn cấu hình và xử lý trạng thái bảo trì (Maintenance)
 
-Cấu hình chi tiết cách Swarm xử lý khi task bị lỗi:
-
+Hệ thống cho phép người quản trị quy định cấu hình khả năng dung lỗi thông qua thuộc tính tự khởi động (`restart_policy`) trong tệp triển khai:
 ```yaml
 deploy:
   restart_policy:
-    condition: on-failure   # Điều kiện restart
-    delay: 5s               # Chờ trước khi thử lại
-    max_attempts: 3         # Số lần thử tối đa trong window
-    window: 120s            # Cửa sổ thời gian đánh giá
+    condition: on-failure
+    delay: 5s
+    max_attempts: 3
+    window: 120s
 ```
+Qua đó, quản trị viên có thể thiết lập chính xác số lần hệ thống cố gắng khởi động lại (`max_attempts`) và thời gian trì hoãn (`delay`) trước khi ngừng nỗ lực khôi phục và đánh dấu hoàn toàn sự thất bại của tác vụ.
 
-### `condition` options:
-
-| Giá trị | Mô tả |
-|---------|-------|
-| `none` | Không bao giờ restart |
-| `on-failure` | Chỉ restart khi exit code ≠ 0 |
-| `any` | Luôn restart (kể cả exit code = 0) |
-
-### Ví dụ logic:
-
-```
-restart_policy:
-  condition: on-failure
-  delay: 5s
-  max_attempts: 3
-  window: 120s
-
-Timeline khi task lỗi:
-  T=0:   Task FAILED (exit 1)
-  T=5s:  Retry 1 → FAILED
-  T=10s: Retry 2 → FAILED  
-  T=15s: Retry 3 → FAILED
-  T=15s: max_attempts đạt → Swarm dừng retry
-         Task ở trạng thái FAILED
-         
-  Nếu sau 120s (window) task vẫn lỗi → báo cáo health degraded
-```
-
----
-
-## 7.6 Health Checks
-
-Swarm có thể tích hợp với Docker HEALTHCHECK để xác định container thực sự "healthy":
-
-```dockerfile
-# Trong Dockerfile
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -f http://localhost/health || exit 1
-```
-
-```yaml
-# Hoặc trong docker-compose.yml
-services:
-  api:
-    image: myapi:latest
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s    # Chờ 40s trước khi bắt đầu health check
-    deploy:
-      replicas: 3
-```
-
-```
-Task States with Healthcheck:
-  STARTING → RUNNING (unhealthy) → RUNNING (healthy) ✅
-                                 → FAILED (nếu max retries exceeded)
-```
-
----
-
-## 7.7 Best Practices cho High Availability
-
-### Cluster setup:
--  Dùng **số lẻ managers** (3 hoặc 5)
--  Manager nodes trên **máy vật lý khác nhau** hoặc **availability zones** khác nhau
--  Manager nodes chỉ làm quản lý (không chạy app tasks)
-
+Hơn thế nữa, nhằm phục vụ công tác bảo trì hệ thống máy chủ vật lý định kỳ, Swarm cung cấp tính năng thu hồi nút mạng chuyên biệt (Drain Node).
 ```bash
-# Ngăn manager chạy application tasks
-docker node update --availability drain manager1
+docker node update --availability drain worker-1
 ```
-
-### Service configuration:
--  Luôn đặt `restart_policy`
--  Luôn đặt resource `limits` và `reservations`
--  Sử dụng `healthcheck` để phát hiện app hung
--  Dùng `update_config.failure_action: rollback`
--  `min_replicas ≥ 2` cho production services
-
-### Data persistence:
--  Database dùng volume, gắn với node cố định (`placement constraints`)
--  Hoặc dùng external storage (NFS, cloud volumes)
--  Backup định kỳ volumes
+Lệnh thực thi trên sẽ chuyển trạng thái hoạt động của máy chủ được chỉ định sang chế độ rút cạn (Drain). Ngay lập tức, máy chủ này sẽ từ chối tiếp nhận các tác vụ mới. Song song đó, Manager Node tiến hành "di tản" toàn bộ các ứng dụng đang tồn tại trên nó sang những máy chủ an toàn khác một cách chủ động và có lộ trình. Đây được xem là một cơ chế phòng ngừa rủi ro chủ động tuyệt vời so với việc phải đối mặt với nguy cơ sụp đổ đột ngột không báo trước.
 
 ---
 
-## 7.8 Drain và Availability
+## 7.6. Bảng tổng kết năng lực chịu lỗi của hệ thống
 
-```bash
-# Drain: Ngăn node nhận task mới + di chuyển tasks hiện có đi nơi khác
-docker node update --availability drain worker1
-# → Tasks trên worker1 được schedule lại sang nodes khác
-# → Dùng khi cần bảo trì node
-
-# Active: Node bình thường, nhận tasks
-docker node update --availability active worker1
-
-# Pause: Ngăn node nhận task mới (tasks hiện tại vẫn chạy)
-docker node update --availability pause worker1
-```
-
----
-
-## 7.9 Tổng kết: Bảng so sánh độ tin cậy
-
-| Scenario | Kết quả | Thời gian phục hồi |
+| Tình huống sự cố | Kết quả xử lý của Swarm | Thời gian phục hồi dự kiến |
 |----------|---------|-------------------|
-| 1 container crash | Tự tạo lại | < 30 giây |
-| 1 worker node crash | Tasks di chuyển sang node khác | 1-2 phút |
-| 1/3 manager crash | Bầu Leader mới, tiếp tục hoạt động | < 10 giây |
-| 2/3 manager crash | **Cluster mất quorum, ngừng hoạt động** | Cần can thiệp |
-| Tất cả manager crash | **Cluster ngừng hoạt động** | Cần can thiệp |
+| 1 Tiến trình Container bị Crash | Tự động tiêu hủy và khởi tạo Task mới thay thế | < 30 giây |
+| 1 Máy chủ Worker Node bị sập | Di tản toàn bộ Tasks sang các Node còn lại | 1-2 phút |
+| 1/3 Máy chủ Manager bị sập | Bầu cử Leader mới, duy trì toàn quyền quản trị | < 10 giây |
+| 2/3 Máy chủ Manager bị sập | **Mất Quorum (Đồng thuận), Cụm bị đóng băng quản trị** | Cần can thiệp khôi phục thủ công |
+| Toàn bộ Manager bị sập | **Hệ thống sụp đổ hoàn toàn** | Cần can thiệp khôi phục thủ công |

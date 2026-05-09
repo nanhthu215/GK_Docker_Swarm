@@ -1,5 +1,0 @@
-====================== Link Video Demo ======================
-Video Demo: 
-https://drive.google.com/drive/folders/1RvZagra7mX4vwhtI1PWPzcGmL841t79j?hl=vi&fbclid=IwY2xjawRrJ2lleHRuA2FlbQIxMABicmlkETFPaG10TkFJYmxMTE43UEg4c3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHrnbYA2vAKvtPTqya6CV-kpgAEL5IB7_HTxPjtpqQK5d37mNn2s-LO5o7iwu_aem__gFOQuMEwqMNOs4dt5OQBg
-Link Repo:
-https://github.com/nanhthu215/GK_Docker_Swarm
