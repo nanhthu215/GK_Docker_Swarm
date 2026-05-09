@@ -14,6 +14,7 @@
 | 5 | [Deploying a Stack](docs/05-deploy-stack.md) |
 | 6 | [Rolling Updates & Rollbacks](docs/06-rolling-updates.md) |
 | 7 | [High Availability & Fault Tolerance](docs/07-ha-fault-tolerance.md) |
+| 8 | [Practical Lab](docs/08-practical-labs.md) |
 
 
 ## Bài tập thực hành
@@ -48,7 +49,7 @@ docker service ls
 ## Cấu trúc dự án
 
 ```
-Mid_Term/
+GK_Docker_Swarm/
 ├── README.md
 ├── HUONG-DAN-CHAY.md
 ├── docs/
@@ -59,6 +60,7 @@ Mid_Term/
 │   ├── 05-deploy-stack.md
 │   ├── 06-rolling-updates.md
 │   ├── 07-ha-fault-tolerance.md
+│   ├── 08-practical-labs.md
 └── labs/
     ├── lab1-nginx-replicas/
         └── docker-compose.yml
